@@ -6,9 +6,21 @@ import (
 	"net/http"
 	"os"
 
+	"log"
+
 	"github.com/Code-Hex/exit"
+	"github.com/k0kubun/pp"
 	"github.com/lestrrat/go-server-starter/listener"
+	"github.com/line/line-bot-sdk-go/linebot"
+	"github.com/line/line-bot-sdk-go/linebot/httphandler"
 	"github.com/pkg/errors"
+)
+
+const (
+	version       = "0.0.1"
+	msg           = "LabBot v" + version + ", Bot for tamaki lab\n"
+	channelSecret = os.Getenv("CHANNEL_SECRET")
+	channelToken  = os.Getenv("CHANNEL_TOKEN")
 )
 
 type labbot struct {
@@ -16,18 +28,29 @@ type labbot struct {
 	*http.Server
 }
 
-func registerHandlers(mux *http.ServeMux) http.Handler {
+func registerHandlers() (http.Handler, error) {
+	mux := http.NewServeMux()
+
+	// Normal
 	mux.HandleFunc("/healthcheck", healthCheck)
-	return mux
+
+	// LINE Webhook
+	webhook, err := httphandler.New(channelSecret, channelToken)
+	if err != nil {
+		return nil, err
+	}
+	webhook.HandleEvents(fromBeacon)
+	webhook.HandleError(func(err error, r *http.Request) {
+		log.Printf("Error: %s", linebot.ErrInvalidSignature.Error())
+		pp.Println(r)
+	})
+	mux.HandleFunc("/line", webhook.ServeHTTP)
+
+	return mux, nil
 }
 
 func New() *labbot {
-	mux := http.NewServeMux()
-	return &labbot{
-		Server: &http.Server{
-			Handler: registerHandlers(mux),
-		},
-	}
+	return &labbot{Server: new(http.Server)}
 }
 
 func (l *labbot) Run() int {
@@ -58,6 +81,12 @@ func (l *labbot) prepare() error {
 	if err != nil {
 		return errors.Wrap(err, "Failed to parse command line args")
 	}
+	handler, err := registerHandlers()
+	if err != nil {
+		return errors.Wrap(err, "Failed to register http handlers")
+	}
+	l.Handler = handler
+
 	return nil
 }
 

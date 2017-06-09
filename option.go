@@ -9,11 +9,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	version = "0.0.1"
-	msg     = "LabBot v" + version + ", Bot for tamaki lab\n"
-)
-
 // Options struct for parse command line arguments
 type Options struct {
 	Help       bool `short:"h" long:"help"`
