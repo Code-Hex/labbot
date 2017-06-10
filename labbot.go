@@ -1,12 +1,16 @@
 package labbot
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 
 	"log"
+
+	"syscall"
 
 	"github.com/Code-Hex/exit"
 	"github.com/k0kubun/pp"
@@ -17,8 +21,11 @@ import (
 )
 
 const (
-	version       = "0.0.1"
-	msg           = "LabBot v" + version + ", Bot for tamaki lab\n"
+	version = "0.0.1"
+	msg     = "LabBot v" + version + ", Bot for tamaki lab\n"
+)
+
+var (
 	channelSecret = os.Getenv("CHANNEL_SECRET")
 	channelToken  = os.Getenv("CHANNEL_TOKEN")
 )
@@ -26,6 +33,7 @@ const (
 type labbot struct {
 	Options
 	*http.Server
+	waitSignal chan os.Signal
 }
 
 func registerHandlers() (http.Handler, error) {
@@ -50,7 +58,16 @@ func registerHandlers() (http.Handler, error) {
 }
 
 func New() *labbot {
-	return &labbot{Server: new(http.Server)}
+	sigch := make(chan os.Signal)
+	signal.Notify(
+		sigch,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+	)
+	return &labbot{
+		Server:     new(http.Server),
+		waitSignal: sigch,
+	}
 }
 
 func (l *labbot) Run() int {
@@ -70,10 +87,11 @@ func (l *labbot) run() error {
 	if err := l.prepare(); err != nil {
 		return err
 	}
-	if err := l.listen(); err != nil {
+	li, err := l.listen()
+	if err != nil {
 		return err
 	}
-	return nil
+	return l.serve(li)
 }
 
 func (l *labbot) prepare() error {
@@ -109,13 +127,13 @@ func parseOptions(opts *Options, argv []string) ([]string, error) {
 	return o, nil
 }
 
-func (l *labbot) listen() error {
+func (l *labbot) listen() (net.Listener, error) {
 	var li net.Listener
 
 	if os.Getenv("SERVER_STARTER_PORT") != "" {
 		listeners, err := listener.ListenAll()
 		if err != nil {
-			return errors.Wrap(err, "server-starter error")
+			return nil, errors.Wrap(err, "server-starter error")
 		}
 		if 0 < len(listeners) {
 			li = listeners[0]
@@ -126,8 +144,19 @@ func (l *labbot) listen() error {
 		var err error
 		li, err = net.Listen("tcp", fmt.Sprintf(":%d", l.Port))
 		if err != nil {
-			return errors.Wrap(err, "listen error")
+			return nil, errors.Wrap(err, "listen error")
 		}
 	}
-	return nil
+	return li, nil
+}
+
+func (l *labbot) serve(li net.Listener) error {
+	go func() {
+		if err := l.Serve(li); err != nil {
+			log.Printf("Error: %s", err.Error())
+		}
+	}()
+	<-l.waitSignal
+
+	return l.Shutdown(context.Background())
 }
