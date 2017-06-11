@@ -8,16 +8,13 @@ import (
 	"os"
 	"os/signal"
 
-	"log"
-
 	"syscall"
 
 	"github.com/Code-Hex/exit"
-	"github.com/k0kubun/pp"
 	"github.com/lestrrat/go-server-starter/listener"
-	"github.com/line/line-bot-sdk-go/linebot"
 	"github.com/line/line-bot-sdk-go/linebot/httphandler"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 const (
@@ -26,6 +23,7 @@ const (
 )
 
 var (
+	slackToken    = os.Getenv("SLACK_TOKEN")
 	channelSecret = os.Getenv("CHANNEL_SECRET")
 	channelToken  = os.Getenv("CHANNEL_TOKEN")
 )
@@ -33,10 +31,11 @@ var (
 type labbot struct {
 	Options
 	*http.Server
+	*zap.Logger
 	waitSignal chan os.Signal
 }
 
-func registerHandlers() (http.Handler, error) {
+func (l *labbot) registerHandlers() (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	// Normal
@@ -47,10 +46,9 @@ func registerHandlers() (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	webhook.HandleEvents(fromBeacon)
+	webhook.HandleEvents(l.fromBeacon)
 	webhook.HandleError(func(err error, r *http.Request) {
-		log.Printf("Error: %s", linebot.ErrInvalidSignature.Error())
-		pp.Println(r)
+		l.Warn("LINEBot handler error", zap.Error(err))
 	})
 	mux.HandleFunc("/line", webhook.ServeHTTP)
 
@@ -99,23 +97,43 @@ func (l *labbot) prepare() error {
 	if err != nil {
 		return errors.Wrap(err, "Failed to parse command line args")
 	}
-	handler, err := registerHandlers()
+	handler, err := l.registerHandlers()
 	if err != nil {
 		return errors.Wrap(err, "Failed to register http handlers")
 	}
 	l.Handler = handler
 
+	logger, err := setupLogger(
+		zap.AddCaller(),
+		zap.AddStacktrace(zap.ErrorLevel),
+	)
+	if err != nil {
+		errors.Wrap(err, "Failed to construct zap")
+	}
+	l.Logger = logger
+
 	return nil
 }
 
-func parseOptions(opts *Options, argv []string) ([]string, error) {
-	if len(argv) == 0 {
-		return nil, exit.MakeUsage(errors.New(string(opts.usage())))
+func setupLogger(opts ...zap.Option) (*zap.Logger, error) {
+	if os.Getenv("STAGE") == "production" {
+		logger, err := zap.NewProduction(opts...)
+		if err != nil {
+			return nil, err
+		}
+		return logger, nil
 	}
+	logger, err := zap.NewDevelopment(opts...)
+	if err != nil {
+		return nil, err
+	}
+	return logger, nil
+}
 
+func parseOptions(opts *Options, argv []string) ([]string, error) {
 	o, err := opts.parse(argv)
 	if err != nil {
-		return nil, exit.MakeDataErr(errors.Wrap(err, "Failed to parse command line options"))
+		return nil, exit.MakeDataErr(err)
 	}
 	if opts.Help {
 		return nil, exit.MakeUsage(errors.New(string(opts.usage())))
@@ -153,7 +171,7 @@ func (l *labbot) listen() (net.Listener, error) {
 func (l *labbot) serve(li net.Listener) error {
 	go func() {
 		if err := l.Serve(li); err != nil {
-			log.Printf("Error: %s", err.Error())
+			l.Warn("Server is stopped", zap.Error(err))
 		}
 	}()
 	<-l.waitSignal

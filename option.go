@@ -20,7 +20,6 @@ type Options struct {
 func (opts *Options) parse(argv []string) ([]string, error) {
 	p := flags.NewParser(opts, flags.PrintErrors)
 	args, err := p.ParseArgs(argv)
-
 	if err != nil {
 		os.Stderr.Write(opts.usage())
 		return nil, errors.Wrap(err, "invalid command line options")
@@ -36,7 +35,7 @@ func (opts Options) usage() []byte {
 		`Usage: labbot [options]
   Options:
   -h,  --help                print usage and exit
-  -v,  --version             display the version of pget and exit
+  -v,  --version             display the version of labbot and exit
   -p,  --port <num>          port number to run server
   --trace                    display detail error messages
 `)
