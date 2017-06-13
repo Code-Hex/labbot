@@ -20,10 +20,10 @@ const (
 	MidNight
 )
 
-var timeStamp map[string]time.Time
+var timeStamp map[string]*time.Time
 
 func init() {
-	timeStamp = make(map[string]time.Time)
+	timeStamp = make(map[string]*time.Time)
 }
 
 func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
@@ -72,6 +72,10 @@ func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
 
 			switch event.Beacon.Type {
 			case linebot.BeaconEventTypeEnter:
+				// When already in the laboratory
+				if isAlready(res.DisplayName) {
+					return
+				}
 				_, err := bot.ReplyMessage(
 					event.ReplyToken,
 					linebot.NewTextMessage(fmt.Sprintf("%sさん%s♡", res.DisplayName, greeting())),
@@ -82,6 +86,10 @@ func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
 				}
 				l.welcomeToLab(api, res.DisplayName, channelID)
 			case linebot.BeaconEventTypeLeave:
+				// When leaves already from laboratory
+				if !isAlready(res.DisplayName) {
+					return
+				}
 				_, err := bot.ReplyMessage(
 					event.ReplyToken,
 					linebot.NewTextMessage(fmt.Sprintf("%sさん、%s", res.DisplayName, getMessageWorkingTime(res.DisplayName))),
@@ -96,9 +104,14 @@ func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
 	}
 }
 
+func isAlready(name string) bool {
+	coming, ok := timeStamp[name]
+	return ok && coming != nil
+}
+
 func (l *labbot) welcomeToLab(api *slack.Client, name, channelID string) {
 	now := time.Now()
-	timeStamp[name] = now
+	timeStamp[name] = &now
 	formatted := now.Format("2006年01月02日 15時04分")
 	msg := fmt.Sprintf("%sさんが%sに来ました♡", name, formatted)
 	params := parameter()
@@ -186,11 +199,8 @@ func getTimeZone() timezone {
 }
 
 func getMessageWorkingTime(name string) string {
-	came, ok := timeStamp[name]
-	if !ok {
-		return "またねー！"
-	}
-	sub := int(time.Now().Sub(came).Hours())
+	came := timeStamp[name]
+	sub := int(time.Now().Sub(*came).Hours())
 	if 0 <= sub && sub <= 4 {
 		return "お疲れ様です！"
 	}
