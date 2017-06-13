@@ -1,9 +1,10 @@
 package labbot
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
-
+	"sort"
 	"time"
 
 	"github.com/line/line-bot-sdk-go/linebot"
@@ -86,10 +87,6 @@ func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
 				}
 				l.welcomeToLab(api, res.DisplayName, channelID)
 			case linebot.BeaconEventTypeLeave:
-				// When leaves already from laboratory
-				if !isAlready(res.DisplayName) {
-					return
-				}
 				_, err := bot.ReplyMessage(
 					event.ReplyToken,
 					linebot.NewTextMessage(fmt.Sprintf("%sさん、%s", res.DisplayName, getMessageWorkingTime(res.DisplayName))),
@@ -102,11 +99,6 @@ func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
 			}
 		}
 	}
-}
-
-func isAlready(name string) bool {
-	coming, ok := timeStamp[name]
-	return ok && coming != nil
 }
 
 func (l *labbot) welcomeToLab(api *slack.Client, name, channelID string) {
@@ -152,6 +144,11 @@ func (l *labbot) seeyouFromLab(api *slack.Client, name, channelID string) {
 		zap.String("channelID", channelID),
 		zap.String("timestamp", timestamp),
 	)
+}
+
+func isAlready(name string) bool {
+	coming, ok := timeStamp[name]
+	return ok && coming != nil
 }
 
 func findChannelID(channels []slack.Channel, name string) (string, error) {
@@ -201,6 +198,7 @@ func getTimeZone() timezone {
 func getMessageWorkingTime(name string) string {
 	came := timeStamp[name]
 	sub := int(time.Now().Sub(*came).Hours())
+
 	if 0 <= sub && sub <= 4 {
 		return "お疲れ様です！"
 	}
@@ -210,4 +208,26 @@ func getMessageWorkingTime(name string) string {
 	}
 
 	return "お願い！死なないでね！"
+}
+
+// "/whoisthere" handler
+func whoIsThere(w http.ResponseWriter, r *http.Request) {
+	list := make([]string, 0, len(timeStamp))
+	for who := range timeStamp {
+		list = append(list, who)
+	}
+	sort.Slice(list, func(i, j int) bool {
+		for x := 0; x < len(list[i]); x++ {
+			if list[i][x] != list[j][x] {
+				return list[i][x] < list[j][x]
+			}
+		}
+		return len(list[i]) < len(list[j])
+	})
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(struct {
+		People []string `json:"people"`
+	}{
+		People: list,
+	})
 }

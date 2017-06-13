@@ -39,7 +39,8 @@ func (l *labbot) registerHandlers() (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	// Normal
-	mux.HandleFunc("/healthcheck", healthCheck)
+	mux.HandleFunc("/healthcheck", healthCheck) // healthcheck.go
+	mux.HandleFunc("/whoisthere", whoIsThere)   // line-beacon.go
 
 	// LINE Webhook
 	webhook, err := httphandler.New(channelSecret, channelToken)
