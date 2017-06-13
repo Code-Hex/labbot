@@ -13,7 +13,9 @@ import (
 	"github.com/Code-Hex/exit"
 	"github.com/lestrrat/go-server-starter/listener"
 	"github.com/line/line-bot-sdk-go/linebot/httphandler"
+	"github.com/nlopes/slack"
 	"github.com/pkg/errors"
+	"github.com/robfig/cron"
 	"go.uber.org/zap"
 )
 
@@ -32,6 +34,8 @@ type labbot struct {
 	Options
 	*http.Server
 	*zap.Logger
+	*cron.Cron
+	*slack.Client
 	waitSignal chan os.Signal
 }
 
@@ -65,6 +69,8 @@ func New() *labbot {
 	)
 	return &labbot{
 		Server:     new(http.Server),
+		Cron:       cron.New(),
+		Client:     slack.New(slackToken),
 		waitSignal: sigch,
 	}
 }
@@ -114,6 +120,11 @@ func (l *labbot) prepare() error {
 	l.Logger = logger
 
 	return nil
+}
+
+func (l *labbot) registerCronHandlers() {
+	// You should to see cron.go
+	l.AddFunc("0 0 18 * * *", l.isThereProgress)
 }
 
 func setupLogger(opts ...zap.Option) (*zap.Logger, error) {

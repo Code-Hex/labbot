@@ -28,14 +28,8 @@ func init() {
 }
 
 func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
-	api := slack.New(slackToken)
-	channels, err := api.GetChannels(false)
-	if err != nil {
-		l.Warn("Failed to get slack channnel", zap.Error(err))
-		return
-	}
-
-	channelID, err := findChannelID(channels, "timestamp")
+	// Find the slack channel
+	channelID, err := l.findChannelID("timestamp")
 	if err != nil {
 		l.Warn("Failed to find channel id", zap.Error(err))
 		return
@@ -85,7 +79,7 @@ func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
 					l.Error("Failed to reply message", zap.Error(err))
 					return
 				}
-				l.welcomeToLab(api, res.DisplayName, channelID)
+				l.welcomeToLab(res.DisplayName, channelID)
 			case linebot.BeaconEventTypeLeave:
 				_, err := bot.ReplyMessage(
 					event.ReplyToken,
@@ -95,13 +89,13 @@ func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
 					l.Error("Failed to reply message", zap.Error(err))
 					return
 				}
-				l.seeyouFromLab(api, res.DisplayName, channelID)
+				l.seeyouFromLab(res.DisplayName, channelID)
 			}
 		}
 	}
 }
 
-func (l *labbot) welcomeToLab(api *slack.Client, name, channelID string) {
+func (l *labbot) welcomeToLab(name, channelID string) {
 	now := time.Now()
 	timeStamp[name] = &now
 	formatted := now.Format("2006年01月02日 15時04分")
@@ -112,7 +106,7 @@ func (l *labbot) welcomeToLab(api *slack.Client, name, channelID string) {
 		Text:  msg,
 	}
 	params.Attachments = []slack.Attachment{attachment}
-	_, timestamp, err := api.PostMessage(channelID, "", params)
+	_, timestamp, err := l.PostMessage(channelID, "", params)
 	if err != nil {
 		l.Warn(`Failed to post "welcome message" to slack`, zap.Error(err))
 		return
@@ -124,7 +118,7 @@ func (l *labbot) welcomeToLab(api *slack.Client, name, channelID string) {
 	)
 }
 
-func (l *labbot) seeyouFromLab(api *slack.Client, name, channelID string) {
+func (l *labbot) seeyouFromLab(name, channelID string) {
 	now := time.Now()
 	formatted := now.Format("2006年01月02日 15時04分")
 	msg := fmt.Sprintf("%sさんが%sに帰りました♡", name, formatted)
@@ -134,7 +128,7 @@ func (l *labbot) seeyouFromLab(api *slack.Client, name, channelID string) {
 		Text:  msg,
 	}
 	params.Attachments = []slack.Attachment{attachment}
-	_, timestamp, err := api.PostMessage(channelID, "", params)
+	_, timestamp, err := l.PostMessage(channelID, "", params)
 	if err != nil {
 		l.Warn(`Failed to post "seeyou message" to slack`, zap.Error(err))
 		return
@@ -149,22 +143,6 @@ func (l *labbot) seeyouFromLab(api *slack.Client, name, channelID string) {
 func isAlready(name string) bool {
 	coming, ok := timeStamp[name]
 	return ok && coming != nil
-}
-
-func findChannelID(channels []slack.Channel, name string) (string, error) {
-	for _, channel := range channels {
-		if channel.Name == name {
-			return channel.ID, nil
-		}
-	}
-	return "", fmt.Errorf("Could not find ChannelID of #%s", name)
-}
-
-func parameter() slack.PostMessageParameters {
-	return slack.PostMessageParameters{
-		Username: "kirari",
-		AsUser:   true,
-	}
 }
 
 func greeting() string {
