@@ -7,16 +7,22 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	"syscall"
 
+	"path/filepath"
+
 	"github.com/Code-Hex/exit"
+	"github.com/go-redis/redis"
+	rotatelogs "github.com/lestrrat/go-file-rotatelogs"
 	"github.com/lestrrat/go-server-starter/listener"
 	"github.com/line/line-bot-sdk-go/linebot/httphandler"
 	"github.com/nlopes/slack"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -36,6 +42,7 @@ type labbot struct {
 	*zap.Logger
 	*cron.Cron
 	*slack.Client
+	Redis      *redis.Client
 	waitSignal chan os.Signal
 }
 
@@ -51,7 +58,7 @@ func (l *labbot) registerHandlers() (http.Handler, error) {
 	if err != nil {
 		return nil, exit.MakeSoftWare(err)
 	}
-	webhook.HandleEvents(l.fromBeacon)
+	webhook.HandleEvents(l.lineAPIInit())
 	webhook.HandleError(func(err error, r *http.Request) {
 		l.Warn("LINEBot handler error", zap.Error(err))
 	})
@@ -91,9 +98,12 @@ func New() *labbot {
 		syscall.SIGTERM,
 	)
 	return &labbot{
-		Server:     new(http.Server),
-		Cron:       cron.New(),
-		Client:     slack.New(slackToken),
+		Server: new(http.Server),
+		Cron:   cron.New(),
+		Client: slack.New(slackToken),
+		Redis: redis.NewClient(&redis.Options{
+			Addr: "127.0.0.1:6379",
+		}),
 		waitSignal: sigch,
 	}
 }
@@ -127,27 +137,51 @@ func (l *labbot) prepare() error {
 	if err != nil {
 		return errors.Wrap(err, "Failed to parse command line args")
 	}
-	handler, err := l.registerHandlers()
+
+	dir := "log"
+	ok, err := exists(dir)
 	if err != nil {
-		return errors.Wrap(err, "Failed to register http handlers")
+		return exit.MakeUnAvailable(err)
 	}
-	l.Handler = handler
+	if !ok {
+		os.Mkdir(dir, os.ModeDir)
+	}
+	logf, err := rotatelogs.New(
+		filepath.Join(dir, "labbot_log.%Y%m%d%H%M"),
+		rotatelogs.WithLinkName(filepath.Join(dir, "labbot_log")),
+		rotatelogs.WithMaxAge(24*time.Hour),
+		rotatelogs.WithRotationTime(time.Hour),
+	)
+	if err != nil {
+		return exit.MakeUnAvailable(err)
+	}
 
 	logger, err := setupLogger(
 		zap.AddCaller(),
 		zap.AddStacktrace(zap.ErrorLevel),
+		zap.ErrorOutput(zapcore.AddSync(logf)),
 	)
 	if err != nil {
 		errors.Wrap(err, "Failed to construct zap")
 	}
 	l.Logger = logger
 
+	handler, err := l.registerHandlers()
+	if err != nil {
+		return errors.Wrap(err, "Failed to register http handlers")
+	}
+	l.Handler = handler
+	l.registerCronHandlers()
+
 	return nil
 }
 
 func (l *labbot) registerCronHandlers() {
-	// You should to see cron.go
-	l.AddFunc("0 0 18 * * *", l.isThereProgress)
+	l.Info("register cron")
+	// Please check cron.go
+	l.AddFunc("0 30 18 * * *", l.isThereProgress)
+
+	l.Start() // start cron job
 }
 
 func setupLogger(opts ...zap.Option) (*zap.Logger, error) {
@@ -210,6 +244,6 @@ func (l *labbot) serve(li net.Listener) error {
 		}
 	}()
 	<-l.waitSignal
-
+	l.Stop() // stop cron job
 	return l.Shutdown(context.Background())
 }

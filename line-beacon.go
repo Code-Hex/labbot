@@ -21,11 +21,28 @@ const (
 	MidNight
 )
 
+const tmformat = "2006年01月02日 15時04分"
+
 type jsonTime time.Time
 
-func (t jsonTime) MarshalJSON() ([]byte, error) {
-	stamp := fmt.Sprintf("\"%s\"", time.Time(t).Format("2006年01月02日 15時04分"))
+func (t *jsonTime) MarshalJSON() ([]byte, error) {
+	stamp := fmt.Sprintf("\"%s\"", time.Time(*t).Format(tmformat))
 	return []byte(stamp), nil
+}
+
+func (t *jsonTime) UnmarshalJSON(formatted []byte) error {
+	// Ignore null, like in the main JSON package.
+	fmted := string(formatted)
+	if fmted == "null" {
+		return nil
+	}
+	t1, err := time.Parse("\""+tmformat+"\"", fmted)
+	if err != nil {
+		return err
+	}
+	*t = jsonTime(t1)
+
+	return nil
 }
 
 type Person struct {
@@ -36,8 +53,20 @@ type Person struct {
 
 var timeStamp map[string]*Person
 
-func init() {
+const key = botName // see slack.go
+
+func (l *labbot) lineAPIInit() func([]*linebot.Event, *http.Request) {
 	timeStamp = make(map[string]*Person)
+	cli := l.Redis
+	serialized, err := cli.Get(key).Result()
+	if err != nil {
+		l.Warn("Could not get the data", zap.Error(err))
+	} else {
+		if err := json.Unmarshal([]byte(serialized), &timeStamp); err != nil {
+			l.Error("Could not unmarshal json", zap.Error(err))
+		}
+	}
+	return l.fromBeacon
 }
 
 func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
@@ -91,12 +120,26 @@ func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
 			}
 		}
 	}
+	l.storePeopleData()
+}
+
+func (l *labbot) storePeopleData() {
+	serialized, err := json.Marshal(timeStamp)
+	if err != nil {
+		l.Error("JSON Marshal error", zap.Error(err))
+		return
+	}
+	cli := l.Redis
+	cmd := cli.Set(key, string(serialized), 0)
+	if err := cmd.Err(); err != nil {
+		l.Error("Could not set serialized data to redis", zap.Error(err))
+	}
 }
 
 func (l *labbot) welcomeToLab(name, channelID string) {
 	now := time.Now()
 	setCameTimeStamp(name, now)
-	formatted := now.Format("2006年01月02日 15時04分")
+	formatted := now.Format(tmformat)
 
 	msg := fmt.Sprintf("%sさんが%sに来ました♡", name, formatted)
 	params := parameter()
@@ -120,7 +163,7 @@ func (l *labbot) welcomeToLab(name, channelID string) {
 func (l *labbot) seeyouFromLab(name, channelID string) {
 	now := time.Now()
 	setLeaveTimeStamp(name, now)
-	formatted := now.Format("2006年01月02日 15時04分")
+	formatted := now.Format(tmformat)
 
 	msg := fmt.Sprintf("%sさんが%sに帰りました♡", name, formatted)
 	params := parameter()
