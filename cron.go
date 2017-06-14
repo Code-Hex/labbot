@@ -4,7 +4,7 @@ import "go.uber.org/zap"
 
 func (l *labbot) isThereProgress() {
 	// Find the slack channel
-	channelID, err := l.findChannelID("tamaki")
+	channelID, err := l.findChannelID("general")
 	if err != nil {
 		l.Warn("Failed to find channel id", zap.Error(err))
 		return

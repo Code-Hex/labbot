@@ -49,7 +49,7 @@ func (l *labbot) registerHandlers() (http.Handler, error) {
 	// LINE Webhook
 	webhook, err := httphandler.New(channelSecret, channelToken)
 	if err != nil {
-		return nil, err
+		return nil, exit.MakeSoftWare(err)
 	}
 	webhook.HandleEvents(l.fromBeacon)
 	webhook.HandleError(func(err error, r *http.Request) {
@@ -57,7 +57,30 @@ func (l *labbot) registerHandlers() (http.Handler, error) {
 	})
 	mux.HandleFunc("/line", webhook.ServeHTTP)
 
+	// Static files
+	dir := "public"
+	ok, err := exists(dir)
+	if err != nil {
+		return nil, exit.MakeUnAvailable(err)
+	}
+	if !ok {
+		os.Mkdir(dir, os.ModeDir)
+	}
+	fs := http.FileServer(http.Dir(dir))
+	mux.Handle("/", fs)
+
 	return mux, nil
+}
+
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return true, err
 }
 
 func New() *labbot {
@@ -131,13 +154,13 @@ func setupLogger(opts ...zap.Option) (*zap.Logger, error) {
 	if os.Getenv("STAGE") == "production" {
 		logger, err := zap.NewProduction(opts...)
 		if err != nil {
-			return nil, err
+			return nil, exit.MakeSoftWare(err)
 		}
 		return logger, nil
 	}
 	logger, err := zap.NewDevelopment(opts...)
 	if err != nil {
-		return nil, err
+		return nil, exit.MakeSoftWare(err)
 	}
 	return logger, nil
 }

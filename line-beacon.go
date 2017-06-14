@@ -21,10 +21,23 @@ const (
 	MidNight
 )
 
-var timeStamp map[string]*time.Time
+type jsonTime time.Time
+
+func (t jsonTime) MarshalJSON() ([]byte, error) {
+	stamp := fmt.Sprintf("\"%s\"", time.Time(t).Format("2006年01月02日 15時04分"))
+	return []byte(stamp), nil
+}
+
+type Person struct {
+	Name       string   `json:"name"`
+	Inlab      bool     `json:"in_lab"`
+	UpdateTime jsonTime `json:"updated_at"`
+}
+
+var timeStamp map[string]*Person
 
 func init() {
-	timeStamp = make(map[string]*time.Time)
+	timeStamp = make(map[string]*Person)
 }
 
 func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
@@ -82,8 +95,9 @@ func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
 
 func (l *labbot) welcomeToLab(name, channelID string) {
 	now := time.Now()
-	timeStamp[name] = &now
+	setCameTimeStamp(name, now)
 	formatted := now.Format("2006年01月02日 15時04分")
+
 	msg := fmt.Sprintf("%sさんが%sに来ました♡", name, formatted)
 	params := parameter()
 	attachment := slack.Attachment{
@@ -105,7 +119,9 @@ func (l *labbot) welcomeToLab(name, channelID string) {
 
 func (l *labbot) seeyouFromLab(name, channelID string) {
 	now := time.Now()
+	setLeaveTimeStamp(name, now)
 	formatted := now.Format("2006年01月02日 15時04分")
+
 	msg := fmt.Sprintf("%sさんが%sに帰りました♡", name, formatted)
 	params := parameter()
 	attachment := slack.Attachment{
@@ -125,9 +141,34 @@ func (l *labbot) seeyouFromLab(name, channelID string) {
 	)
 }
 
+func setCameTimeStamp(name string, now time.Time) {
+	setTimeStamp(name, now, true)
+}
+
+func setLeaveTimeStamp(name string, now time.Time) {
+	setTimeStamp(name, now, false)
+}
+
+func setTimeStamp(name string, now time.Time, inlab bool) {
+	_, ok := timeStamp[name]
+	if !ok {
+		timeStamp[name] = &Person{
+			Name:       name,
+			Inlab:      inlab,
+			UpdateTime: jsonTime(now),
+		}
+	} else {
+		timeStamp[name].Inlab = inlab
+		timeStamp[name].UpdateTime = jsonTime(now)
+	}
+}
+
 func isAlready(name string) bool {
 	coming, ok := timeStamp[name]
-	return ok && coming != nil
+	if ok {
+		return coming.Inlab
+	}
+	return false
 }
 
 func greeting() string {
@@ -144,7 +185,6 @@ func greeting() string {
 
 func getTimeZone() timezone {
 	hour := time.Now().Hour()
-
 	if 11 <= hour && hour < 17 {
 		return Daytime
 	}
@@ -160,7 +200,8 @@ func getTimeZone() timezone {
 
 func getMessageWorkingTime(name string) string {
 	came := timeStamp[name]
-	sub := int(time.Now().Sub(*came).Hours())
+	t := time.Time(came.UpdateTime)
+	sub := int(time.Now().Sub(t).Hours())
 
 	if 0 <= sub && sub <= 4 {
 		return "お疲れ様です！"
@@ -175,15 +216,17 @@ func getMessageWorkingTime(name string) string {
 
 // "/whoisthere" handler
 func whoIsThere(w http.ResponseWriter, r *http.Request) {
-	list := make([]string, 0, len(timeStamp))
-	for who := range timeStamp {
+	list := make([]*Person, 0, len(timeStamp))
+	for _, who := range timeStamp {
 		list = append(list, who)
 	}
-	sort.Strings(list)
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].Name < list[j].Name
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(struct {
-		People []string `json:"people"`
+		People []*Person `json:"people"`
 	}{
 		People: list,
 	})
