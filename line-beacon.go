@@ -194,14 +194,8 @@ func whoIsThere(w http.ResponseWriter, r *http.Request) {
 	for who := range timeStamp {
 		list = append(list, who)
 	}
-	sort.Slice(list, func(i, j int) bool {
-		for x := 0; x < len(list[i]); x++ {
-			if list[i][x] != list[j][x] {
-				return list[i][x] < list[j][x]
-			}
-		}
-		return len(list[i]) < len(list[j])
-	})
+	sort.Strings(list)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(struct {
 		People []string `json:"people"`
