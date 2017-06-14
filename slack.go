@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const botName = "kirari"
+const botName = "chihiro"
 
 func (l *labbot) findChannelID(name string) (string, error) {
 	// Get slack channnels
