@@ -36,21 +36,6 @@ func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
 	}
 
 	for _, event := range events {
-		if event.Type == linebot.EventTypeMessage {
-			bot, err := linebot.New(channelSecret, channelToken)
-			if err != nil {
-				l.Error("Failed to construct linebot", zap.Error(err))
-				return
-			}
-			_, err = bot.ReplyMessage(
-				event.ReplyToken,
-				linebot.NewTextMessage("こんにちは！"),
-			).Do()
-			if err != nil {
-				l.Error("Failed to reply message", zap.Error(err))
-				return
-			}
-		}
 		if event.Type == linebot.EventTypeBeacon {
 			src := event.Source
 			userID := src.UserID
