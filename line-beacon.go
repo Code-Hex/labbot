@@ -180,7 +180,7 @@ func greeting() string {
 	case Night:
 		return "こんばんは"
 	}
-	return "夜遅くまでお疲れ様です"
+	return "遅くまでお疲れ様です"
 }
 
 func getTimeZone() timezone {
@@ -203,10 +203,12 @@ func getMessageWorkingTime(name string) string {
 	t := time.Time(came.UpdateTime)
 	sub := int(time.Now().Sub(t).Hours())
 
-	if 0 <= sub && sub <= 4 {
+	// 0 ~ 3 hours
+	if 0 <= sub && sub < 4 {
 		return "お疲れ様です！"
 	}
 
+	// 4 ~ 8 hours
 	if 4 <= sub && sub <= 8 {
 		return "とっても頑張ったね！偉い！"
 	}

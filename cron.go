@@ -10,7 +10,7 @@ func (l *labbot) isThereProgress() {
 		return
 	}
 	params := parameter()
-	_, timestamp, err := l.PostMessage(channelID, "<!here> 進捗はありますか？", params)
+	_, timestamp, err := l.PostMessage(channelID, "<!here> 何かお困りですか？", params)
 	if err != nil {
 		l.Warn(`Failed to post "Is there progress?" to slack`, zap.Error(err))
 		return
