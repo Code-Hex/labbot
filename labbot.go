@@ -184,6 +184,7 @@ func (l *labbot) registerCronHandlers() {
 	l.Info("register cron")
 	// Please check cron.go
 	l.AddFunc("0 30 18 * * *", l.isThereProgress)
+	l.AddFunc("0 0 10 * * 5", l.noticeSeminar)
 
 	l.Start() // start cron job
 }

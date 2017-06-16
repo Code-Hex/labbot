@@ -10,9 +10,28 @@ func (l *labbot) isThereProgress() {
 		return
 	}
 	params := parameter()
-	_, timestamp, err := l.PostMessage(channelID, "<!here> 何かお困りですか？", params)
+	_, timestamp, err := l.PostMessage(channelID, "<!here> 進捗どうですか！？", params)
 	if err != nil {
-		l.Warn(`Failed to post "Is there progress?" to slack`, zap.Error(err))
+		l.Error(`Failed to post "Is there progress?" to slack`, zap.Error(err))
+		return
+	}
+	l.Info(
+		"Message successfully sent to slack",
+		zap.String("channelID", channelID),
+		zap.String("timestamp", timestamp),
+	)
+}
+
+func (l *labbot) noticeSeminar() {
+	channelID, err := l.findChannelID("tamaki")
+	if err != nil {
+		l.Error("Failed to find channel id", zap.Error(err))
+		return
+	}
+	params := parameter()
+	_, timestamp, err := l.PostMessage(channelID, "<!channel> みなさんっ！今日はゼミの日ですよ！", params)
+	if err != nil {
+		l.Warn(`Failed to post "Today is seminar day" to slack`, zap.Error(err))
 		return
 	}
 	l.Info(
