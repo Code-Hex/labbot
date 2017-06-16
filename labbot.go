@@ -71,7 +71,7 @@ func (l *labbot) registerHandlers() (http.Handler, error) {
 		return nil, exit.MakeUnAvailable(err)
 	}
 	if !ok {
-		os.Mkdir(dir, os.ModeDir)
+		os.Mkdir(dir, os.ModeDir|os.ModePerm)
 	}
 	fs := http.FileServer(http.Dir(dir))
 	mux.Handle("/", fs)
@@ -144,11 +144,15 @@ func (l *labbot) prepare() error {
 		return exit.MakeUnAvailable(err)
 	}
 	if !ok {
-		os.Mkdir(dir, os.ModeDir)
+		os.Mkdir(dir, os.ModeDir|os.ModePerm)
+	}
+	absPath, err := filepath.Abs(dir)
+	if err != nil {
+		return exit.MakeUnAvailable(err)
 	}
 	logf, err := rotatelogs.New(
-		filepath.Join(dir, "labbot_log.%Y%m%d%H%M"),
-		rotatelogs.WithLinkName(filepath.Join(dir, "labbot_log")),
+		filepath.Join(absPath, "labbot_log.%Y%m%d%H%M"),
+		rotatelogs.WithLinkName(filepath.Join(absPath, "labbot_log")),
 		rotatelogs.WithMaxAge(24*time.Hour),
 		rotatelogs.WithRotationTime(time.Hour),
 	)
