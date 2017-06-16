@@ -253,10 +253,10 @@ func getMessageWorkingTime(name string) string {
 
 	// 4 ~ 8 hours
 	if 4 <= sub && sub <= 8 {
-		return "とっても頑張ったね！偉い！"
+		return "とっても頑張ったんですね…。尊敬します！"
 	}
 
-	return "お願い！死なないでね！"
+	return "死なないでくださいね！"
 }
 
 // "/whoisthere" handler
