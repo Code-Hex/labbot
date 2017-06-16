@@ -138,32 +138,9 @@ func (l *labbot) prepare() error {
 		return errors.Wrap(err, "Failed to parse command line args")
 	}
 
-	dir := "log"
-	ok, err := exists(dir)
-	if err != nil {
-		return exit.MakeUnAvailable(err)
-	}
-	if !ok {
-		os.Mkdir(dir, os.ModeDir|os.ModePerm)
-	}
-	absPath, err := filepath.Abs(dir)
-	if err != nil {
-		return exit.MakeUnAvailable(err)
-	}
-	logf, err := rotatelogs.New(
-		filepath.Join(absPath, "labbot_log.%Y%m%d%H%M"),
-		rotatelogs.WithLinkName(filepath.Join(absPath, "labbot_log")),
-		rotatelogs.WithMaxAge(24*time.Hour),
-		rotatelogs.WithRotationTime(time.Hour),
-	)
-	if err != nil {
-		return exit.MakeUnAvailable(err)
-	}
-
 	logger, err := setupLogger(
 		zap.AddCaller(),
 		zap.AddStacktrace(zap.ErrorLevel),
-		zap.ErrorOutput(zapcore.AddSync(logf)),
 	)
 	if err != nil {
 		errors.Wrap(err, "Failed to construct zap")
@@ -190,18 +167,40 @@ func (l *labbot) registerCronHandlers() {
 }
 
 func setupLogger(opts ...zap.Option) (*zap.Logger, error) {
-	if os.Getenv("STAGE") == "production" {
-		logger, err := zap.NewProduction(opts...)
-		if err != nil {
-			return nil, exit.MakeSoftWare(err)
-		}
-		return logger, nil
-	}
-	logger, err := zap.NewDevelopment(opts...)
+	config := genLoggerConfig()
+	enc := zapcore.NewJSONEncoder(config.EncoderConfig)
+
+	dir := "log"
+	ok, err := exists(dir)
 	if err != nil {
-		return nil, exit.MakeSoftWare(err)
+		return nil, exit.MakeUnAvailable(err)
 	}
-	return logger, nil
+	if !ok {
+		os.Mkdir(dir, os.ModeDir|os.ModePerm)
+	}
+	absPath, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, exit.MakeUnAvailable(err)
+	}
+	logf, err := rotatelogs.New(
+		filepath.Join(absPath, "labbot_log.%Y%m%d%H%M"),
+		rotatelogs.WithLinkName(filepath.Join(absPath, "labbot_log")),
+		rotatelogs.WithMaxAge(24*time.Hour),
+		rotatelogs.WithRotationTime(time.Hour),
+	)
+	if err != nil {
+		return nil, exit.MakeUnAvailable(err)
+	}
+	core := zapcore.NewCore(enc, zapcore.AddSync(logf), config.Level)
+
+	return zap.New(core, opts...), nil
+}
+
+func genLoggerConfig() zap.Config {
+	if os.Getenv("STAGE") == "production" {
+		return zap.NewProductionConfig()
+	}
+	return zap.NewDevelopmentConfig()
 }
 
 func parseOptions(opts *Options, argv []string) ([]string, error) {
