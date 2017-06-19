@@ -1,42 +1,13 @@
 package labbot
 
-import "go.uber.org/zap"
-
 func (l *labbot) isThereProgress() {
-	// Find the slack channel
-	channelID, err := l.findChannelID("general")
-	if err != nil {
-		l.Warn("Failed to find channel id", zap.Error(err))
-		return
-	}
-	params := parameter()
-	_, timestamp, err := l.PostMessage(channelID, "<!here> 進捗どうですか！？", params)
-	if err != nil {
-		l.Error(`Failed to post "Is there progress?" to slack`, zap.Error(err))
-		return
-	}
-	l.Info(
-		"Message successfully sent to slack",
-		zap.String("channelID", channelID),
-		zap.String("timestamp", timestamp),
-	)
+	l.sendToSlack("general", "<!here> 進捗どうですか！？")
 }
 
 func (l *labbot) noticeSeminar() {
-	channelID, err := l.findChannelID("tamaki")
-	if err != nil {
-		l.Error("Failed to find channel id", zap.Error(err))
-		return
-	}
-	params := parameter()
-	_, timestamp, err := l.PostMessage(channelID, "<!channel> みなさんっ！今日はゼミの日ですよ！", params)
-	if err != nil {
-		l.Warn(`Failed to post "Today is seminar day" to slack`, zap.Error(err))
-		return
-	}
-	l.Info(
-		"Message successfully sent to slack",
-		zap.String("channelID", channelID),
-		zap.String("timestamp", timestamp),
-	)
+	l.sendToSlack("tamaki", "<!channel> みなさんっ！今日はゼミの日ですよ！")
+}
+
+func (l *labbot) noticeDayAfterTomorrow() {
+	l.sendToSlack("tamaki", "<!channel> みなさんっ！明後日はゼミの日ですよ！")
 }
