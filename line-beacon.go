@@ -263,7 +263,9 @@ func getMessageWorkingTime(name string) string {
 func whoIsThere(w http.ResponseWriter, r *http.Request) {
 	list := make([]*Person, 0, len(timeStamp))
 	for _, who := range timeStamp {
-		list = append(list, who)
+		if who.Inlab {
+			list = append(list, who)
+		}
 	}
 	sort.Slice(list, func(i, j int) bool {
 		return list[i].Name < list[j].Name
