@@ -248,6 +248,10 @@ func (l *labbot) serve(li net.Listener) error {
 			l.Warn("Server is stopped", zap.Error(err))
 		}
 	}()
+	return l.shutdown()
+}
+
+func (l *labbot) shutdown() error {
 	<-l.waitSignal
 	l.Stop() // stop cron job
 	return l.Shutdown(context.Background())
