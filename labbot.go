@@ -243,12 +243,30 @@ func (l *labbot) listen() (net.Listener, error) {
 }
 
 func (l *labbot) serve(li net.Listener) error {
+	go l.rtmRun()
 	go func() {
 		if err := l.Serve(li); err != nil {
 			l.Warn("Server is stopped", zap.Error(err))
 		}
 	}()
 	return l.shutdown()
+}
+
+func (l *labbot) rtmRun() {
+	api := l.Client
+	rtm := api.NewRTM()
+	go rtm.ManageConnection()
+	for msg := range rtm.IncomingEvents {
+		switch ev := msg.Data.(type) {
+		case *slack.MessageEvent:
+			l.msgEvent(rtm, ev.Channel, ev.Username, ev.Text)
+		case *slack.RTMError:
+			l.Error("slack rtm error", zap.String("Error", ev.Error()))
+		case *slack.InvalidAuthEvent:
+			l.Error("Invalid credentials")
+			return
+		}
+	}
 }
 
 func (l *labbot) shutdown() error {
