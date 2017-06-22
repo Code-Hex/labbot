@@ -252,14 +252,34 @@ func (l *labbot) serve(li net.Listener) error {
 	return l.shutdown()
 }
 
+type replyData struct {
+	Channel  string
+	Username string
+	Text     string
+}
+
 func (l *labbot) rtmRun() {
-	api := l.Client
-	rtm := api.NewRTM()
+	botID, err := l.findUserID(botName)
+	if err != nil {
+		l.Error("Could not to get the bot id", zap.Error(err))
+	}
+
+	rtm := l.NewRTM()
 	go rtm.ManageConnection()
+
+	reply := make(chan replyData)
+	defer close(reply)
+
+	go l.msgEvent(rtm, botID, reply)
+
 	for msg := range rtm.IncomingEvents {
 		switch ev := msg.Data.(type) {
 		case *slack.MessageEvent:
-			l.msgEvent(rtm, ev.Channel, ev.Username, ev.Text)
+			reply <- replyData{
+				Username: ev.Username,
+				Channel:  ev.Channel,
+				Text:     ev.Text,
+			}
 		case *slack.RTMError:
 			l.Error("slack rtm error", zap.String("Error", ev.Error()))
 		case *slack.InvalidAuthEvent:
