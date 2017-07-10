@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/line/line-bot-sdk-go/linebot"
@@ -51,7 +52,10 @@ type Person struct {
 	UpdateTime jsonTime `json:"updated_at"`
 }
 
-var timeStamp map[string]*Person
+var (
+	mu        sync.RWMutex
+	timeStamp map[string]*Person
+)
 
 const key = botName // see slack.go
 
@@ -62,11 +66,29 @@ func (l *labbot) lineAPIInit() func([]*linebot.Event, *http.Request) {
 	if err != nil {
 		l.Warn("Could not get the data", zap.Error(err))
 	} else {
+		mu.Lock()
 		if err := json.Unmarshal([]byte(serialized), &timeStamp); err != nil {
 			l.Error("Could not unmarshal json", zap.Error(err))
 		}
+		mu.Unlock()
+		// user expire
+		l.expire()
+
 	}
 	return l.fromBeacon
+}
+
+func (l *labbot) expire() {
+	for k, v := range timeStamp {
+		duration := time.Since(time.Time(v.UpdateTime))
+		l.Info("diff", zap.String("who", k), zap.Float64("since", duration.Hours()))
+		if duration.Hours() > 36.0 {
+			l.Info("delete", zap.String("who", k))
+			mu.Lock()
+			delete(timeStamp, k)
+			mu.Unlock()
+		}
+	}
 }
 
 func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
@@ -124,6 +146,7 @@ func (l *labbot) fromBeacon(events []*linebot.Event, r *http.Request) {
 }
 
 func (l *labbot) storePeopleData() {
+	l.expire() // expire
 	serialized, err := json.Marshal(timeStamp)
 	if err != nil {
 		l.Error("JSON Marshal error", zap.Error(err))
