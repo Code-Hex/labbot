@@ -31,9 +31,10 @@ const (
 )
 
 var (
-	slackToken    = os.Getenv("SLACK_TOKEN")
-	channelSecret = os.Getenv("CHANNEL_SECRET")
-	channelToken  = os.Getenv("CHANNEL_TOKEN")
+	slackToken        = os.Getenv("SLACK_TOKEN")
+	channelSecret     = os.Getenv("CHANNEL_SECRET")
+	channelToken      = os.Getenv("CHANNEL_TOKEN")
+	verificationToken = os.Getenv("VERIFICATION_TOKEN")
 )
 
 type labbot struct {
@@ -52,6 +53,9 @@ func (l *labbot) registerHandlers() (http.Handler, error) {
 	// Normal
 	mux.HandleFunc("/healthcheck", healthCheck) // healthcheck.go
 	mux.HandleFunc("/whoisthere", whoIsThere)   // line-beacon.go
+
+	// slack webhook
+	mux.HandleFunc("/slack_participate", l.ServeHTTP)
 
 	// LINE Webhook
 	webhook, err := httphandler.New(channelSecret, channelToken)
@@ -252,12 +256,6 @@ func (l *labbot) serve(li net.Listener) error {
 	return l.shutdown()
 }
 
-type replyData struct {
-	Channel  string
-	Username string
-	Text     string
-}
-
 func (l *labbot) rtmRun() {
 	botID, err := l.findUserID(botName)
 	if err != nil {
@@ -267,7 +265,7 @@ func (l *labbot) rtmRun() {
 	rtm := l.NewRTM()
 	go rtm.ManageConnection()
 
-	reply := make(chan replyData)
+	reply := make(chan *slack.MessageEvent)
 	defer close(reply)
 
 	go l.msgEvent(rtm, botID, reply)
@@ -275,11 +273,7 @@ func (l *labbot) rtmRun() {
 	for msg := range rtm.IncomingEvents {
 		switch ev := msg.Data.(type) {
 		case *slack.MessageEvent:
-			reply <- replyData{
-				Username: ev.Username,
-				Channel:  ev.Channel,
-				Text:     ev.Text,
-			}
+			reply <- ev
 		case *slack.RTMError:
 			l.Error("slack rtm error", zap.String("Error", ev.Error()))
 		case *slack.InvalidAuthEvent:
