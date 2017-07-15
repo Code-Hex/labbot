@@ -82,7 +82,7 @@ func (l *labbot) expire() {
 	for k, v := range timeStamp {
 		duration := time.Since(time.Time(v.UpdateTime))
 		l.Info("diff", zap.String("who", k), zap.Float64("since", duration.Hours()))
-		if duration.Hours() > 36.0 {
+		if duration.Hours() > 24 {
 			l.Info("delete", zap.String("who", k))
 			mu.Lock()
 			delete(timeStamp, k)
