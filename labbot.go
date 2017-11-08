@@ -166,6 +166,7 @@ func (l *labbot) registerCronHandlers() {
 	// Please check cron.go
 	l.AddFunc("0 30 18 * * *", l.isThereProgress)
 	l.AddFunc("0 0 10 * * 5", l.noticeSeminar)
+	l.AddFunc("0 0 15 * * 1,3,5", l.noticeClean)
 	l.AddFunc("0 0 17 * * 3", l.noticeDayAfterTomorrow)
 
 	l.Start() // start cron job
